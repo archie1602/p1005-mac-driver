@@ -33,6 +33,9 @@ but I could not try them and the installer only sets up a P1005.
 
 ## Installing
 
+There is a [step by step guide with screenshots](docs/install-guide.md) from
+my own install. The short version:
+
 1. Download `P1005-Driver-1.0.0.pkg` from the
    [Releases page](https://github.com/archie1602/p1005-mac-driver/releases/latest).
 2. Plug in the printer, switch it on and double click the package.
