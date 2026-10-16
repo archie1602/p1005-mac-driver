@@ -1,0 +1,13 @@
+# build output and test scratch files
+/build/
+/tests/out/
+
+# HP's firmware and driver package are never committed (see firmware/README.md)
+/firmware/*.acl
+*.dmg
+*.pkg
+
+# queue backups made by install.sh contain details of your own printer
+/backup/
+
+.DS_Store

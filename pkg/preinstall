@@ -1,0 +1,35 @@
+#!/bin/sh
+# preinstall for P1005-Driver.pkg (runs as root before any file is installed;
+# output goes to /var/log/install.log)
+#
+# The printer needs HP's firmware, which the public package does not contain.
+# fetch-firmware.sh takes it from a previous install, from HP's old driver if
+# it is still on this Mac, from this package if it was built with
+# `make pkg-offline`, or downloads HP's official driver package and extracts
+# it. If none of that works the installation stops before anything changes.
+
+DEST=/Library/Printers/p1005-native
+HERE=$(cd "$(dirname "$0")" && pwd)
+export LANG=C
+
+if [ -n "${DRY_RUN:-}" ]; then
+    echo "would run: sh $HERE/fetch-firmware.sh $DEST/P1005-firmware.acl"
+    exit 0
+fi
+
+new_dest=
+[ -d "$DEST" ] || new_dest=1
+install -d -o root -g wheel -m 755 "$DEST" || exit 1
+if [ -f "$HERE/HP1005.acl" ]; then
+    sh "$HERE/fetch-firmware.sh" "$DEST/P1005-firmware.acl" "$HERE/HP1005.acl"
+else
+    sh "$HERE/fetch-firmware.sh" "$DEST/P1005-firmware.acl"
+fi
+rc=$?
+if [ $rc -ne 0 ]; then
+    echo "p1005-native: could not get the printer firmware, installation stopped"
+    [ -z "$new_dest" ] || rmdir "$DEST" 2>/dev/null
+    exit $rc
+fi
+chown root:wheel "$DEST/P1005-firmware.acl"
+exit 0

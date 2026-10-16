@@ -1,0 +1,55 @@
+#!/bin/sh
+# postinstall for P1005-Driver.pkg (runs as root; output goes to /var/log/install.log)
+#
+#  1. register the PPD where macOS looks for drivers, so "Add Printer" in
+#     System Settings picks it automatically;
+#  2. switch every existing P1005 USB queue to it (old PPD backed up), or
+#     create a queue if a P1005 is plugged in and none exists.
+# Set DRY_RUN=1 to only print what would be done.
+
+DEST=/Library/Printers/p1005-native
+PPD_NAME="HP LaserJet P1005 native.gz"
+PPD_DIR=/Library/Printers/PPDs/Contents/Resources
+BACKUP=$DEST/backup
+QUEUE=HP_LaserJet_P1005
+export LANG=C
+
+run() { if [ -n "${DRY_RUN:-}" ]; then echo "would run: $*"; else "$@"; fi; }
+log() { echo "p1005-native: $*"; }
+
+run mkdir -p "$PPD_DIR"
+run install -o root -g wheel -m 644 "$DEST/$PPD_NAME" "$PPD_DIR/$PPD_NAME"
+# A package copied by AirDrop or a browser can leave a quarantine flag on the
+# files, which would stop CUPS from running the filter.
+run xattr -cr "$DEST"
+run xattr -c "$PPD_DIR/$PPD_NAME"
+
+PLAIN_PPD=$(mktemp /tmp/p1005-native.XXXXXX)
+gunzip -c "$DEST/$PPD_NAME" > "$PLAIN_PPD"
+
+queues=$(lpstat -v 2>/dev/null | awk '$NF ~ /^usb:.*LaserJet%20P1005/ { q = $3; sub(/:$/, "", q); print q }')
+for q in $queues; do
+    current=/etc/cups/ppd/$q.ppd
+    if [ -f "$current" ] && ! grep -q "p1005-native" "$current" && [ ! -f "$BACKUP/$q.ppd" ]; then
+        run mkdir -p "$BACKUP"
+        run cp "$current" "$BACKUP/$q.ppd"
+        log "saved previous driver of $q to $BACKUP/$q.ppd"
+    fi
+    run lpadmin -p "$q" -P "$PLAIN_PPD" && log "queue $q now uses the native driver"
+    run cupsenable "$q"
+    run cupsaccept "$q"
+done
+
+if [ -z "$queues" ]; then
+    uri=$(lpinfo --include-schemes usb -v 2>/dev/null | awk '$2 ~ /LaserJet%20P1005/ { print $2; exit }')
+    if [ -n "$uri" ]; then
+        run lpadmin -p "$QUEUE" -E -v "$uri" -P "$PLAIN_PPD" -D "HP LaserJet P1005" \
+            && log "created queue $QUEUE for $uri"
+        lpstat -d 2>/dev/null | grep -q "system default destination" || run lpadmin -d "$QUEUE"
+    else
+        log "no P1005 connected; add it later in System Settings > Printers & Scanners"
+    fi
+fi
+
+rm -f "$PLAIN_PPD"
+exit 0
